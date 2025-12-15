@@ -32,7 +32,6 @@ class ObjectTracker:
                 self.age[self.next_id] = 0
                 self.next_id += 1
         else:
-            # Match existing tracks to new detections using greedy nearest neighbor
             used_input = set()
             used_tracked = set()
 
@@ -59,15 +58,14 @@ class ObjectTracker:
                     used_tracked.add(tracked_id)
                 else:
                     self.age[tracked_id] += 1
-
-            # Create new tracks for unmatched detections
+                    
             for idx in range(len(centroids)):
                 if idx not in used_input:
                     self.tracked_objects[self.next_id] = {'centroid': centroids[idx], 'frames': 1}
                     self.age[self.next_id] = 0
                     self.next_id += 1
 
-            # Remove tracks that are too old or unreliable
+
             to_remove = [
                 tid for tid in self.tracked_objects
                 if self.age[tid] > self.max_age or (self.tracked_objects[tid]['frames'] < 2 and self.age[tid] > 5)
@@ -115,11 +113,11 @@ class SizeFilterManager:
                 else:
                     max_area = max(max_area, range_max * (pixels_per_cm ** 2))
 
-        # Fallback if no sizes enabled
+
         if min_area == float('inf'):
             return 300, 400000
 
-        # Handle infinity in max_area (from VeryLarge)
+
         if max_area == float('inf'):
             max_area = 400000
 
@@ -158,14 +156,11 @@ class MeasurementTool:
         self.size_filter = SizeFilterManager()
         self.show_size_menu = False
 
-        # Frame skipping for AUTO mode
-        self.auto_detect_interval = 4  # Detect every 4 frames
+        self.auto_detect_interval = 4
         self.frame_since_detect = 0
 
-        # Detection parameters - tuned for reliable detection
         self.contour_threshold = 50
 
-        # Pre-allocated resources (avoid per-frame allocation)
         self.morph_kernel = None
         self.font = cv2.FONT_HERSHEY_SIMPLEX
         self.font_scale = 0.45
@@ -179,7 +174,7 @@ class MeasurementTool:
 
     def init_resources(self):
         """Pre-allocate resources used per-frame."""
-        # Pre-create morphology kernel (7x7 ellipse)
+
         self.morph_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
     def detect_monitor_specs(self):
@@ -317,27 +312,27 @@ class MeasurementTool:
         frame = self.current_frame.copy()
         min_area, max_area = self.size_filter.get_min_max_area(self.pixels_per_cm)
 
-        # Convert to grayscale
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Gaussian blur for noise reduction
+
         blur = cv2.GaussianBlur(gray, (7, 7), 0)
 
-        # Binary threshold
+
         _, binary = cv2.threshold(blur, self.contour_threshold, 255, cv2.THRESH_BINARY)
 
-        # Morphological operations
+
         binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, self.morph_kernel)
         binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, self.morph_kernel)
 
-        # Find contours
+        
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         self.detected_objects = []
 
         for contour in contours:
             area = cv2.contourArea(contour)
-            # Filter by area range
+
             if min_area < area < max_area:
                 obj = self.extract_object_info(contour, area)
                 if self.size_filter.is_size_enabled(obj['area_cm2']):
@@ -440,7 +435,7 @@ class MeasurementTool:
                 'perimeter_cm': prev['perimeter_cm'] * (1 - alpha) + measurement_dict['perimeter_cm'] * alpha
             }
 
-        # Limit smoothed measurements cache size
+
         if len(self.smoothed_measurements) > 500:
             oldest_key = next(iter(self.smoothed_measurements))
             del self.smoothed_measurements[oldest_key]
@@ -631,13 +626,13 @@ class MeasurementTool:
         """Optimized frame drawing with minimal redundant operations."""
         h, w = frame.shape[:2]
 
-        # Draw header bar
+
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, 75), (15, 25, 35), -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
         cv2.rectangle(frame, (0, 0), (w, 75), (100, 150, 200), 2)
 
-        # Draw main buttons
+
         button_y = 25
         button_height = 40
         button_spacing = 6
@@ -672,7 +667,7 @@ class MeasurementTool:
         if self.show_size_menu:
             menu_bottom = self.draw_size_filter_menu(frame)
 
-        # Draw detected objects
+
         for i, obj in enumerate(self.detected_objects):
             x, y, w_obj, h_obj = obj['bbox']
 
@@ -690,7 +685,7 @@ class MeasurementTool:
                 i + 1, obj['width_cm'], obj['height_cm'], obj['size_category'][0])
             cv2.putText(frame, label_text, (x, y - 10), self.font, 0.5, color, 2)
 
-        # Draw info panel only if object selected
+
         if self.selected_index is not None and self.selected_index < len(self.detected_objects):
             obj = self.detected_objects[self.selected_index]
 
@@ -722,7 +717,7 @@ class MeasurementTool:
                 cv2.putText(frame, line, (panel_x + 15, y_offset), self.font, 0.52, (220, 220, 220), 1)
                 y_offset += 30
 
-        # Draw alert message
+        
         if self.alert_message:
             if (datetime.now() - self.alert_time).total_seconds() < 3:
                 text_size = cv2.getTextSize(self.alert_message, self.font, 0.8, 2)[0]
@@ -740,7 +735,7 @@ class MeasurementTool:
                 cv2.putText(frame, self.alert_message, (alert_x, alert_y),
                             self.font, 0.8, self.alert_color, 2)
 
-        # Draw status bar
+
         enabled_text = ','.join([s[:3] for s in self.size_filter.get_enabled_sizes()])
         mode_text = "AUTO" if self.auto_mode_enabled else "MANUAL"
         status_text = "{} | Filter: [{}] | Objects: {} | Measured: {} | FPS: {:.1f}".format(
@@ -781,7 +776,7 @@ class MeasurementTool:
             self.current_frame = frame.copy()
             self.update_fps()
 
-            # AUTO mode with frame skipping
+
             if self.auto_mode_enabled:
                 if self.frame_since_detect >= self.auto_detect_interval:
                     self.detect_objects()
@@ -852,4 +847,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
